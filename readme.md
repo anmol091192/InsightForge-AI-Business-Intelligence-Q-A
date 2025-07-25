@@ -41,7 +41,7 @@ The application uses:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/InsightForge.git
+   git clone https://github.com/anmol091192/InsightForge.git
    cd InsightForge
    ```
 

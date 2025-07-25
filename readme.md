@@ -203,6 +203,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **"CSV is missing required columns"**: Check CSV format and column names
 - **"Cannot hash argument"**: This is handled automatically with underscore prefixes
 
+### Screenshots
+
+<img width="654" height="478" alt="Screenshot 2025-07-25 at 1 36 27 PM" src="https://github.com/user-attachments/assets/d80e8839-7141-4e8a-8173-5e72b6806c99" />
+<img width="676" height="516" alt="Screenshot 2025-07-25 at 1 36 35 PM" src="https://github.com/user-attachments/assets/0b11f4ab-550b-4e5e-9ee8-4a22c2e7c330" />
+<img width="689" height="571" alt="Screenshot 2025-07-25 at 1 36 41 PM" src="https://github.com/user-attachments/assets/9778cfd7-1c71-482d-a8a5-17b99566342a" />
+<img width="671" height="410" alt="Screenshot 2025-07-25 at 1 36 46 PM" src="https://github.com/user-attachments/assets/6b6a3aa6-62f4-407a-a5cf-5c76c0c4ac08" />
+<img width="667" height="856" alt="Screenshot 2025-07-25 at 1 36 52 PM" src="https://github.com/user-attachments/assets/fede1a17-b1ce-4cd1-bdf3-21651190932f" />
+<img width="630" height="516" alt="Screenshot 2025-07-25 at 1 37 45 PM" src="https://github.com/user-attachments/assets/5dc6202d-d458-456a-9dc7-5c862efe5942" />
+<img width="703" height="502" alt="Screenshot 2025-07-25 at 1 43 41 PM" src="https://github.com/user-attachments/assets/0871cd6a-1273-404f-93a5-e1b64db19e9d" />
+
+
 ---
 
 **Made with ❤️ using Streamlit, LangChain, and AI**

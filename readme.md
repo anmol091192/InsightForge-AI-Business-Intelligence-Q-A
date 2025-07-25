@@ -203,10 +203,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **"CSV is missing required columns"**: Check CSV format and column names
 - **"Cannot hash argument"**: This is handled automatically with underscore prefixes
 
-## 📧 Support
-
-For questions or issues, please open an issue on GitHub or contact [your-email@example.com].
-
 ---
 
 **Made with ❤️ using Streamlit, LangChain, and AI**

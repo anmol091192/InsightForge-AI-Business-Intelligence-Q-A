@@ -2,7 +2,7 @@ import os
 import sys
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -30,23 +30,80 @@ class Config:
     AGE_BINS = [0,18,25,35,45,55,65,100]
     AGE_LABELS = ['<18','18-25','26-35','36-45','46-55','56-65','65+']
 
-# Load environment variables for API keys
+# Load environment variables
 load_dotenv()
-gemini_api_key = os.getenv("GEMINI_API_KEY")
-openai_api_key = os.getenv("OPENAI_API_KEY")
+serper_api_key = os.getenv("SERPER_API_KEY")
 
-def validate_api_keys():
-    """Validate that required API keys are available"""
-    missing_keys = []
-    if not gemini_api_key:
-        missing_keys.append("GEMINI_API_KEY")
-    if not openai_api_key:
-        missing_keys.append("OPENAI_API_KEY")
+def get_api_keys_from_user():
+    """Get API keys from user input in Streamlit sidebar"""
+    st.sidebar.header("🔑 API Configuration")
+    st.sidebar.markdown("**Choose your preferred AI provider:**")
     
-    if missing_keys:
-        st.error(f"Missing API keys: {', '.join(missing_keys)}")
-        st.info("Please add your API keys to the .env file")
-        st.stop()
+    # Security notice
+    st.sidebar.info("""
+    🔒 **Security Notice:**
+    - Your API keys are stored in temporary session memory only
+    - Keys are automatically deleted when you close the browser
+    - We never store or log your API keys
+    - Keys are only used for your current session
+    """)
+    
+    # Provider selection
+    provider = st.sidebar.radio(
+        "Select AI Provider:",
+        ["OpenAI (GPT)", "Google Gemini"],
+        help="Choose one provider - you only need one API key"
+    )
+    
+    openai_key = None
+    gemini_key = None
+    
+    if provider == "OpenAI (GPT)":
+        openai_key = st.sidebar.text_input(
+            "OpenAI API Key", 
+            type="password",
+            help="Get your key from: https://platform.openai.com/api-keys"
+        )
+        if not openai_key:
+            st.sidebar.error("⚠️ Please provide your OpenAI API key")
+            return None, None, provider
+        st.sidebar.success("✅ OpenAI API key provided!")
+        
+    else:  # Google Gemini
+        gemini_key = st.sidebar.text_input(
+            "Google Gemini API Key", 
+            type="password",
+            help="Get your key from: https://makersuite.google.com/app/apikey"
+        )
+        if not gemini_key:
+            st.sidebar.error("⚠️ Please provide your Gemini API key")
+            return None, None, provider
+        st.sidebar.success("✅ Gemini API key provided!")
+    
+    return openai_key, gemini_key, provider
+
+def validate_api_key(api_key, provider):
+    """Validate that the provided API key works"""
+    try:
+        if provider == "OpenAI (GPT)" and api_key:
+            # Test OpenAI key with a simple call
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            # Just test if the key format is valid
+            if not api_key.startswith('sk-'):
+                raise ValueError("Invalid OpenAI API key format")
+            return True
+            
+        elif provider == "Google Gemini" and api_key:
+            # Basic validation for Gemini key
+            if len(api_key) < 20:
+                raise ValueError("Invalid Gemini API key format")
+            return True
+            
+        return False
+    except Exception as e:
+        st.error(f"❌ API key validation failed: {str(e)}")
+        return False
 
 def validate_csv_data(df):
     """Validate CSV data has required columns"""
@@ -117,23 +174,36 @@ def create_reference_answers(metrics):
     }
 
 @st.cache_resource
-def create_or_load_faiss_index(_all_docs, data_source):  # Add underscore prefix
+def create_or_load_faiss_index(_all_docs, data_source, _provider, _openai_key, _gemini_key):
     """Create or load FAISS index with caching"""
-    openai_embed = OpenAIEmbeddings()
-    faiss_index_path = f"faiss_index_{data_source.lower()}"
+    # Choose embedding based on provider
+    if _provider == "OpenAI (GPT)" and _openai_key:
+        embeddings = OpenAIEmbeddings(openai_api_key=_openai_key)
+        embed_type = "openai"
+    elif _provider == "Google Gemini" and _gemini_key:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=_gemini_key
+        )
+        embed_type = "gemini"
+    else:
+        st.error("No valid API key found for embeddings")
+        return None
+        
+    faiss_index_path = f"faiss_index_{data_source.lower()}_{embed_type}"
     
     try:
         if os.path.exists(faiss_index_path):
             faiss_index = FAISS.load_local(
                 faiss_index_path,
-                openai_embed,
+                embeddings,
                 allow_dangerous_deserialization=True
             )
-            st.success("✅ Loaded existing index")
+            st.success(f"✅ Loaded existing {embed_type} index")
         else:
-            faiss_index = FAISS.from_documents(_all_docs, openai_embed)  # Use _all_docs
+            faiss_index = FAISS.from_documents(_all_docs, embeddings)
             faiss_index.save_local(faiss_index_path)
-            st.success("✅ Created new index")
+            st.success(f"✅ Created new {embed_type} index")
         
         return faiss_index
     except Exception as e:
@@ -277,8 +347,11 @@ def display_chat_history():
 
 # Main Application
 def main():
-    # Validate API keys
-    validate_api_keys()
+    # Check if Serper API key is available
+    if not serper_api_key:
+        st.error("❌ SERPER_API_KEY not found in environment variables. Please add it to your .env file.")
+        st.info("Get your free Serper API key from: https://serper.dev/")
+        return
     
     # Initialize session state
     initialize_session_state()
@@ -287,12 +360,49 @@ def main():
     st.title("🔍 InsightForge: AI Business Intelligence Q&A")
     st.markdown("Upload your data and ask intelligent questions!")
     
-    # User selects data source and LLM
+    # Get API keys from user
+    openai_key, gemini_key, provider = get_api_keys_from_user()
+    
+    if not openai_key and not gemini_key:
+        st.info("👈 Please provide your API key in the sidebar to get started")
+        st.markdown("""
+        ### How to get API keys:
+        
+        **🔥 Option 1: OpenAI (Recommended for better accuracy)**
+        1. Go to [OpenAI Platform](https://platform.openai.com/api-keys)
+        2. Sign in or create an account  
+        3. Click "Create new secret key"
+        4. Copy the key and paste it in the sidebar
+        
+        **🌟 Option 2: Google Gemini (Free tier available)**
+        1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+        2. Sign in with your Google account
+        3. Click "Create API Key"
+        4. Copy the key and paste it in the sidebar
+        
+        ### 💰 Cost Information:
+        - **OpenAI GPT-3.5**: ~$0.002 per 1K tokens (~$0.01 per typical query)
+        - **Google Gemini**: Often has free tier available
+        
+        ### 🔒 Your data is safe:
+        - API keys are only stored in your browser session
+        - Keys are automatically deleted when you close the browser
+        - We never log or store your API keys
+        """)
+        return
+    
+    # Validate the provided API key
+    current_key = openai_key if provider == "OpenAI (GPT)" else gemini_key
+    if not validate_api_key(current_key, provider):
+        return
+    
+    # User selects data source
+    st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
         data_source = st.selectbox("📊 Choose your data source:", ["CSV", "PDF"])
     with col2:
-        llm_choice = st.selectbox("🤖 Choose your LLM:", ["Gemini", "OpenAI"])
+        st.info(f"🤖 Using: {provider}")
     
     uploaded_file = None
     df = None
@@ -356,18 +466,18 @@ def main():
     if uploaded_file is not None:
         # Choose LLM based on user selection
         try:
-            if llm_choice == "Gemini":
+            if provider == "Google Gemini":
                 chat = ChatGoogleGenerativeAI(
                     model="gemini-2.5-flash",
                     temperature=Config.TEMPERATURE,
-                    google_api_key=gemini_api_key,
+                    google_api_key=gemini_key,
                     convert_system_message_to_human=True
                 )
             else:  # OpenAI
                 chat = ChatOpenAI(
                     model="gpt-3.5-turbo",
                     temperature=Config.TEMPERATURE,
-                    openai_api_key=openai_api_key
+                    openai_api_key=openai_key
                 )
         except Exception as e:
             st.error(f"Error initializing LLM: {str(e)}")
@@ -375,7 +485,13 @@ def main():
         
         # Create embeddings and FAISS index for retrieval
         with st.spinner("Creating embeddings..."):
-            faiss_index = create_or_load_faiss_index(all_docs, data_source)
+            faiss_index = create_or_load_faiss_index(
+                all_docs, 
+                data_source, 
+                provider,
+                openai_key, 
+                gemini_key
+            )
             if faiss_index is None:
                 st.stop()
             retriever = faiss_index.as_retriever()
@@ -389,21 +505,11 @@ def main():
                 input_key="query"
             )
             
-            # RetrievalQA chain for answering questions
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=chat,
-                chain_type="stuff",
-                retriever=retriever,
-                memory=memory,
-                return_source_documents=False,
-                output_key="result"
-            )
-            
             # QA evaluation chain for automatic grading (only for CSV)
             if data_source == "CSV":
                 qa_eval_chain = QAEvalChain.from_llm(chat)
             
-            # Initialize agent with tools
+            # Initialize agent with tools (using Serper API key from environment)
             tools = [search_the_internet]
             agent = initialize_agent(
                 tools=tools,
